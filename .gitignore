@@ -46,6 +46,6 @@ Thumbs.db
 .env
 .env.local
 
-# CSV files (optional - uncomment if you don't want to track CSV files)
-# *.csv
+# CSV files
+*.csv
 
