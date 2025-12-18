@@ -1,82 +1,102 @@
-# Python Image Downloader
+# Didit Verification Image Downloader
 
-Python program to read an Excel file with session IDs, fetch verification decisions from Didit API, and download verification images.
+Python script to download verification images and videos from Didit API based on session IDs in a CSV file.
+
+## Features
+
+- ✅ Reads CSV files with session IDs and client IDs
+- ✅ Parallel processing with configurable workers (default: 4)
+- ✅ Built-in rate limiting (100 requests/minute)
+- ✅ Automatic retry on rate limit errors (429)
+- ✅ Tracks download status in CSV (`downloaded` field)
+- ✅ Skips already completed downloads
+- ✅ Batch CSV updates for performance
 
 ## Setup
 
-1. Install Python dependencies:
+1. Create and activate a virtual environment:
 ```bash
-cd python
-pip install -r requirements.txt
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-Or install individually:
+2. Install dependencies:
 ```bash
-pip install pandas openpyxl requests
+pip install -r requirements.txt
 ```
 
 ## Usage
 
-From the `python` directory:
 ```bash
-python download_images.py <excel_file> [output_directory]
+python download_images.py <csv_file> [output_directory] [workers]
 ```
 
-Or from the project root:
-```bash
-python python/download_images.py client-session.xlsx ./downloads
-```
+### Arguments
+
+- `csv_file` (required): Path to CSV file containing session IDs
+- `output_directory` (optional): Directory to save downloads (default: `downloads`)
+- `workers` (optional): Number of parallel workers (default: 4)
 
 ### Examples
 
 ```bash
-# From python directory - use relative paths to parent
-cd python
-python download_images.py ../client-session.xlsx ../downloads
+# Basic usage with defaults
+python download_images.py result.csv
 
-# From project root
-python python/download_images.py client-session.xlsx ./downloads
+# Specify output directory
+python download_images.py result.csv downloads
+
+# Custom number of workers
+python download_images.py result.csv downloads 4
+
+# With virtual environment activated
+source venv/bin/activate
+python download_images.py result.csv downloads 4
 ```
 
-## Excel File Format
+## CSV File Format
 
-The Excel file should contain at least one of these columns:
-- `session_id` or column containing "session" and "id" (required)
-- `client_id` or `crm_client_id` or column containing "client" and "id" (optional, uses session_id if not found)
+The CSV file must contain the following columns:
 
-### Example Excel Structure
+- `id` (required): Session ID from Didit
+- `client_id` (required): Client ID for organizing downloads
+- `downloaded` (optional): Status field that will be updated to "completed" after successful download
 
-| session_id | client_id | email |
-|------------|-----------|-------|
-| 6b62bcb6-868a-4e97-9d38-3a81577695d0 | 273341 | user@example.com |
-| b33f7e9b-8aa4-46d6-9b61-4eb0a510a1b6 | 271602 | another@example.com |
+### Example CSV Structure
+
+```csv
+id,client_id,workflow_id,status,downloaded
+00087142-d938-4ebc-b90d-d16fba9c0ded,253432,2d365ee0-465a-4fe0-9876-e11c58f01283,Approved,
+0008bae3-f817-4417-9283-e3c2777ae017,253616,2d365ee0-465a-4fe0-9876-e11c58f01283,Approved,
+```
 
 ## What It Does
 
-1. Reads the Excel file
+1. Reads the CSV file and filters rows that aren't already marked as "completed"
 2. For each row:
-   - Extracts `session_id` and `client_id`
-   - Calls Didit API to get verification decision (equivalent to `getVerificationDecision` function in `src/index.ts`)
+   - Extracts `session_id` from the `id` column
+   - Extracts `client_id` from the `client_id` column
+   - Calls Didit API to get verification decision (with rate limiting)
    - Creates a folder named with the `client_id`
    - Downloads the following files:
      - `front_image` - from `id_verification.front_image`
      - `portrait_image` - from `id_verification.portrait_image`
      - `full_front_image` - from `id_verification.full_front_image`
      - `reference_image` - from `liveness.reference_image`
-     - `video_url` - from `liveness.video_url`
-   - Saves files with their field names as filenames (e.g., `front_image.jpg`, `video_url.mp4`)
+     - `video` - from `liveness.video_url`
+   - Updates the `downloaded` field to "completed" in the CSV
 
 ## Output Structure
 
 ```
 downloads/
-├── 273341/
+├── 253432/
 │   ├── front_image.jpg
 │   ├── portrait_image.jpg
-│   ├── full_front_image.pdf
+│   ├── full_front_image.jpg
 │   ├── reference_image.jpg
-│   └── video_url.mp4
-├── 271602/
+│   └── video.mp4
+├── 253616/
 │   ├── front_image.jpg
 │   ├── portrait_image.jpg
 │   └── ...
@@ -84,25 +104,59 @@ downloads/
 
 ## Configuration
 
-The API key can be set via environment variable or uses the hardcoded fallback value:
+### API Key
 
-1. Set environment variable:
+The API key can be set via environment variable:
+
 ```bash
 export DIDIT_API_KEY="your_api_key_here"
 ```
 
-2. Or the script will use the hardcoded fallback value (already configured)
+Or it will use the hardcoded fallback value in the script.
+
+### Rate Limiting
+
+- **API Limit**: 100 requests per minute
+- **Rate Limit Interval**: 0.6 seconds between requests (enforced globally)
+- **Automatic Retry**: If rate limit (429) is hit, waits 60 seconds and retries
+
+### Parallel Processing
+
+- Default: 4 workers
+- Each worker processes one session at a time
+- CSV updates are batched (every 25 completed downloads) for performance
+- Thread-safe operations ensure data integrity
+
+## Progress Tracking
+
+The script:
+- Shows progress every 25 processed rows
+- Updates the CSV file periodically to prevent data loss
+- Skips rows already marked as "completed"
+- Provides a summary at the end with success/failure counts
 
 ## Error Handling
 
-- Skips rows with empty session_id
+- Skips rows with empty `session_id` or `client_id`
 - Continues processing even if one row fails
-- Shows detailed error messages for failed downloads
-- Provides summary at the end
+- Handles API errors gracefully
+- Automatically retries on rate limit errors (429)
+- Shows detailed error messages for debugging
 
 ## Notes
 
-- The program includes a 0.5 second delay between requests to avoid rate limiting
-- File extensions are automatically detected from URLs or inferred from content
-- Missing files (null URLs) are skipped with a warning
+- The script automatically detects file extensions from URLs
+- Missing files (null URLs) are skipped
+- The CSV file is updated in-place with download status
+- Files are organized by `client_id` in separate folders
+- The `downloads/` directory is excluded from git (see `.gitignore`)
 
+## Requirements
+
+- Python 3.7+
+- pandas >= 2.0.0
+- requests >= 2.31.0
+
+## License
+
+This project is for internal use only.
