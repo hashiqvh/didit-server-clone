@@ -14,7 +14,7 @@ from threading import Lock
 
 DIDIT_API_KEY = os.getenv(
     "DIDIT_API_KEY",
-    "IpXrxiS83l14LCTv4kJH_HZ4IfQVX3raDTbxebXW4Qo"
+    "KEY"
 )
 
 API_BASE_URL = "https://verification.didit.me/v2/session"
